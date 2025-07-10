@@ -2,45 +2,72 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Heart, X, RotateCcw, Zap } from 'lucide-react';
 import SwipeCard from './SwipeCard';
-import { mockUsers, mockLocalStorage } from '../data/mock';
+import { userAPI, swipeAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 
 const SwipeInterface = () => {
   const [users, setUsers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Filter out already swiped users
-    const availableUsers = mockUsers.filter(user => 
-      !mockLocalStorage.isLiked(user.id) && !mockLocalStorage.isDisliked(user.id)
-    );
-    setUsers(availableUsers);
+    loadUsers();
   }, []);
 
-  const handleSwipe = (userId, direction) => {
+  const loadUsers = async () => {
+    try {
+      setLoading(true);
+      const potentialMatches = await userAPI.getDiscoverUsers();
+      setUsers(potentialMatches);
+      setCurrentIndex(0);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load potential matches. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSwipe = async (userId, direction) => {
     if (isAnimating) return;
     
     setIsAnimating(true);
     
-    setTimeout(() => {
-      if (direction === 'right') {
-        const isMatch = mockLocalStorage.like(userId);
-        if (isMatch) {
-          toast({
-            title: "It's a Match! 🎉",
-            description: "You both liked each other!",
-            duration: 3000,
-          });
-        }
-      } else {
-        mockLocalStorage.dislike(userId);
+    try {
+      const action = direction === 'right' ? 'like' : 'dislike';
+      const response = await swipeAPI.swipeUser({
+        swiped_id: userId,
+        action: action
+      });
+      
+      if (response.is_match) {
+        toast({
+          title: "It's a Match! 🎉",
+          description: "You both liked each other!",
+          duration: 3000,
+        });
       }
       
-      setCurrentIndex(prev => prev + 1);
+      setTimeout(() => {
+        setCurrentIndex(prev => prev + 1);
+        setIsAnimating(false);
+      }, 300);
+      
+    } catch (error) {
+      console.error('Swipe error:', error);
       setIsAnimating(false);
-    }, 300);
+      toast({
+        title: "Error",
+        description: "Failed to record swipe. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLike = () => {
@@ -66,6 +93,16 @@ const SwipeInterface = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <div className="text-6xl mb-4">⏳</div>
+        <h2 className="text-2xl font-bold mb-2">Loading...</h2>
+        <p className="text-gray-600">Finding amazing people for you!</p>
+      </div>
+    );
+  }
+
   if (currentIndex >= users.length) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -73,11 +110,11 @@ const SwipeInterface = () => {
         <h2 className="text-2xl font-bold mb-2">You're all caught up!</h2>
         <p className="text-gray-600 mb-6">No more profiles to show right now.</p>
         <Button 
-          onClick={() => window.location.reload()} 
+          onClick={loadUsers} 
           className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
         >
           <RotateCcw className="w-4 h-4 mr-2" />
-          Refresh
+          Find More People
         </Button>
       </div>
     );
