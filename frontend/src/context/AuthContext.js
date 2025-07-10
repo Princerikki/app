@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { mockCurrentUser } from '../data/mock';
+import { authAPI } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -16,42 +16,84 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking for existing session
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    // Check for existing token and fetch user data
+    const token = localStorage.getItem('token');
+    if (token) {
+      authAPI.getMe()
+        .then((userData) => {
+          setUser(userData);
+          localStorage.setItem('currentUser', JSON.stringify(userData));
+        })
+        .catch((error) => {
+          console.error('Failed to fetch user:', error);
+          localStorage.removeItem('token');
+          localStorage.removeItem('currentUser');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const login = async (email, password) => {
-    // Mock login - in real app, this would call the backend
-    if (email && password) {
-      const userData = { ...mockCurrentUser, email };
-      setUser(userData);
+    try {
+      const response = await authAPI.login({ email, password });
+      const { access_token, user: userData } = response;
+      
+      localStorage.setItem('token', access_token);
       localStorage.setItem('currentUser', JSON.stringify(userData));
+      setUser(userData);
+      
       return { success: true };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Login failed' 
+      };
     }
-    return { success: false, error: 'Invalid credentials' };
   };
 
   const signup = async (userData) => {
-    // Mock signup - in real app, this would call the backend
-    const newUser = { ...mockCurrentUser, ...userData };
-    setUser(newUser);
-    localStorage.setItem('currentUser', JSON.stringify(newUser));
-    return { success: true };
+    try {
+      const response = await authAPI.signup(userData);
+      const { access_token, user: newUser } = response;
+      
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('currentUser', JSON.stringify(newUser));
+      setUser(newUser);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Signup error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Signup failed' 
+      };
+    }
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
   };
 
-  const updateProfile = (updates) => {
-    const updatedUser = { ...user, ...updates };
-    setUser(updatedUser);
-    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  const updateProfile = async (updates) => {
+    try {
+      const updatedUser = await authAPI.updateProfile(updates);
+      setUser(updatedUser);
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      return { success: true };
+    } catch (error) {
+      console.error('Profile update error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Profile update failed' 
+      };
+    }
   };
 
   const value = {
