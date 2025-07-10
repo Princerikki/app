@@ -83,7 +83,20 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updates) => {
     try {
-      const updatedUser = await authAPI.updateProfile(updates);
+      const response = await fetch(`${API}/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(updates),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Update failed');
+      }
+      
+      const updatedUser = await response.json();
       setUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       return { success: true };
